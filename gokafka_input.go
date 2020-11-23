@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	js "encoding/json"
 	"github.com/childe/gohangout/codec"
 	"github.com/golang/glog"
 	kafka_go "github.com/segmentio/kafka-go"
+	"net/http"
 	"time"
 )
 
@@ -15,6 +17,31 @@ type GoKafkaInput struct {
 	decoder        codec.Decoder
 	reader         *kafka_go.Reader
 	readConfig     *kafka_go.ReaderConfig
+}
+
+/**
+增加一个状态获取的接口
+*/
+type HttpKafka struct {
+	kafka *GoKafkaInput
+}
+
+/**
+返回reader的status接口的数据
+*/
+func (h *HttpKafka) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK)
+	if h.kafka.reader != nil {
+		stats := h.kafka.reader.Stats()
+		if data, err := js.Marshal(stats); err == nil {
+			_, _ = writer.Write(data)
+		} else {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	_, _ = writer.Write([]byte(`{}`))
 }
 
 /**
@@ -77,6 +104,7 @@ func New(config map[interface{}]interface{}) interface{} {
 	p := &GoKafkaInput{
 		messages:       make(chan *kafka_go.Message, 10),
 		decorateEvents: false,
+		reader:         nil,
 	}
 	if v, ok := config["decorateEvents"]; ok {
 		p.decorateEvents = v.(bool)
@@ -95,6 +123,17 @@ func New(config map[interface{}]interface{}) interface{} {
 		glog.Fatal("consumer_settings wrong")
 	}
 
+	if listen, ok := config["StatsAddr"]; ok {
+		httpAddr := listen.(string)
+		httpKafka := &HttpKafka{
+			kafka: p,
+		}
+		go func() {
+			glog.Info("Start Http Server: ", httpAddr)
+			_ = http.ListenAndServe(httpAddr, httpKafka)
+		}()
+
+	}
 	go func() {
 		for {
 			m, err := p.reader.ReadMessage(context.Background())
