@@ -3,7 +3,11 @@
 
 # 特点
 使用[kafka-go](https://github.com/segmentio/kafka-go) 这个仓库来作为input
-还有很多参数没有暴露出来.
+### TODO
+TLS配置项的支持
+
+### DONE
+SASL已经支持
 
 # 使用方法
 
@@ -27,6 +31,10 @@ inputs:
       GroupID: 'test.abc'
       Topic: 'con_attack_log'
       StatsAddr: 'localhost:11456'
+      SASL:
+        Type: 'Plain'
+        Username: 'huangjacky'
+        Password: 'test'
 outputs:
   - Kafka:
       topic: 'test'
